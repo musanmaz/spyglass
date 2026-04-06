@@ -9,21 +9,24 @@ import { branding } from './lib/branding';
 
 export default function App() {
   const streamingStatus = useQueryStore((s) => s.streamingStatus);
-  const setSupportedQueryTypes = useQueryStore((s) => s.setSupportedQueryTypes);
 
   useEffect(() => {
+    const { setSupportedQueryTypes, setQueryType, queryType } = useQueryStore.getState();
     const base = import.meta.env.VITE_WS_URL
       ? new URL(import.meta.env.VITE_WS_URL).origin.replace(/^ws/, 'http')
       : '';
     fetch(`${base}/api/v1/info`)
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data.supported_query_types)) {
+        if (Array.isArray(data.supported_query_types) && data.supported_query_types.length > 0) {
           setSupportedQueryTypes(data.supported_query_types);
+          if (!data.supported_query_types.includes(queryType)) {
+            setQueryType(data.supported_query_types[0]);
+          }
         }
       })
       .catch(() => {});
-  }, [setSupportedQueryTypes]);
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--lg-bg-primary)' }}>
