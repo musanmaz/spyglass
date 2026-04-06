@@ -4,211 +4,235 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Redis 7+](https://img.shields.io/badge/Redis-7%2B-DC382D?logo=redis&logoColor=white)](https://redis.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Demo](https://img.shields.io/badge/Live_Demo-▶_Try_it-blueviolet)](https://spyglass.mehmet.tech)
 
-> **[Live Demo](https://spyglass.mehmet.tech)** — Fully functional demo connected to [Route Views](http://www.routeviews.org/) (University of Oregon) public route server. Try a BGP Route lookup!
+> **[Live Demo](https://spyglass.mehmet.tech)** — BGP Route, Ping, and Traceroute
 
-A modern, web-based network looking glass for ISPs and network operators. Run BGP route, ping, and traceroute queries across your network infrastructure from a clean, responsive UI.
+A modern, open-source network looking glass for ISPs and network operators. Connect your routers and let anyone run BGP route lookups, ping, and traceroute queries through a clean web UI.
 
 ## Features
 
-**Query Types**
-
-- **BGP Route** — IPv4/IPv6 routing table lookup
-- **BGP Community** — Filter routes by community value
-- **BGP AS Path** — Route lookup by AS path regex
-- **Ping** — ICMP ping test (5 packets)
-- **Traceroute** — Path tracing
-
-**Supported Platforms (13)**
-
-| Platform | Identifier |
-|---|---|
-| Cisco IOS-XR | `cisco_iosxr` |
-| Juniper Junos | `juniper_junos` |
-| Cisco IOS | `cisco_ios` |
-| Cisco NX-OS | `cisco_nxos` |
-| Arista EOS | `arista_eos` |
-| Huawei VRP | `huawei_vrp` |
-| Nokia SR OS | `nokia_sros` |
-| MikroTik | `mikrotik` |
-| FRRouting | `frrouting` |
-| BIRD | `bird` |
-| OpenBGPD | `openbgpd` |
-| VyOS | `vyos` |
-| TNSR | `tnsr` |
-
-**Security & Performance**
-
-- 3-tier rate limiting (frontend debounce, Nginx `limit_req`, Redis sliding window)
-- Input validation and sanitization (RFC-compliant IP/prefix checks)
-- Command whitelist to prevent injection
-- X-Forwarded-For spoofing protection
-- Security headers (HSTS, CSP, X-Frame-Options, and more)
-- Real-time streaming output via WebSocket and SSE
+- **BGP Route / Community / AS Path** — IPv4 and IPv6 routing table lookups
+- **Ping** — ICMP echo from router or local server
+- **Traceroute** — Hop-by-hop path tracing
+- **13 router platforms** — Cisco IOS/IOS-XR/NX-OS, Juniper, Arista, Huawei, Nokia, MikroTik, FRRouting, BIRD, VyOS, and more
+- **Local execution** — Optional `local` platform to run ping/traceroute directly on the Spyglass server
+- **Real-time streaming** — Live output via WebSocket
+- **Security hardened** — Command whitelist, input validation, rate limiting, security headers
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker and Docker Compose
-- (Optional) Python 3.11+ — for generating a secret key
-
-### Development
+### 1. Clone and configure
 
 ```bash
-# Clone the repository
-git clone <repo-url> && cd lg
+git clone https://github.com/musanmaz/spyglass.git
+cd spyglass
 
-# Run the setup script
-bash scripts/setup.sh
+# Create environment file
+cp .env.example .env
 ```
 
-The script creates a `.env` file, starts all services, and runs database migrations.
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8000
-- API Docs: http://localhost:8000/api/docs
-
-### Production
+Edit `.env` and set at minimum:
 
 ```bash
-cp .env.example .env
-# Update DB_PASSWORD, REDIS_PASSWORD, and SECRET_KEY in .env
-# Copy SSL certificates to nginx/ssl/
+SECRET_KEY=<random-secret>          # python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+DB_PASSWORD=<strong-password>
+REDIS_PASSWORD=<strong-password>
+ORG_NAME=Your ISP Name
+PRIMARY_ASN=65000
+SERVER_NAME=lg.example.com
+```
 
+### 2. Configure your devices
+
+```bash
+cp config/devices.yaml.example config/devices.yaml
+```
+
+Edit `config/devices.yaml` and add your routers:
+
+```yaml
+devices:
+  # SSH router — all query types
+  - id: core-01
+    name: "Core Router — Istanbul"
+    host: "10.0.1.1"
+    platform: cisco_iosxr        # See supported platforms below
+    protocol: ssh                # ssh or telnet
+    username: "lookingglass"
+    password: "secret"           # Or use DEVICE_SSH_PASSWORD env var
+    location:
+      city: "Istanbul"
+      country: "TR"
+      facility: "Equinix IS1"
+    network:
+      asn: 65000
+      as_name: "My Network"
+      ipv4_source: "198.51.100.1"
+      ipv6_source: "2001:db8::1"
+    ssh:
+      port: 22
+      timeout: 10
+
+  # Restrict a device to specific query types
+  - id: edge-01
+    name: "Edge Router — Frankfurt"
+    host: "10.0.2.1"
+    platform: juniper_junos
+    username: "lookingglass"
+    password: "secret"
+    location:
+      city: "Frankfurt"
+      country: "DE"
+    network:
+      asn: 65000
+      as_name: "My Network"
+      ipv4_source: "198.51.100.2"
+    ssh:
+      port: 22
+      timeout: 10
+    directives:              # Only allow these query types
+      - bgp_route
+      - bgp_community
+
+  # Optional: run ping/traceroute from the Spyglass server itself
+  - id: local
+    name: "Istanbul (Local)"
+    platform: local
+    location:
+      city: "Istanbul"
+      country: "TR"
+    network:
+      asn: 65000
+      as_name: "My Network"
+    directives:
+      - ping
+      - traceroute
+```
+
+### 3. Start the services
+
+```bash
 docker compose up -d --build
 docker compose exec backend alembic upgrade head
 ```
 
-## Configuration
+Your looking glass is now running at `https://lg.example.com` (after configuring Nginx/SSL).
+
+## Supported Platforms
+
+| Platform | `platform` value | SSH | Telnet |
+|---|---|---|---|
+| Cisco IOS-XR | `cisco_iosxr` | yes | yes |
+| Cisco IOS | `cisco_ios` | yes | yes |
+| Cisco NX-OS | `cisco_nxos` | yes | — |
+| Juniper Junos | `juniper_junos` | yes | yes |
+| Arista EOS | `arista_eos` | yes | — |
+| Huawei VRP | `huawei_vrp` | yes | — |
+| Nokia SR OS | `nokia_sros` | yes | — |
+| MikroTik RouterOS | `mikrotik` | yes | — |
+| FRRouting | `frrouting` | yes | — |
+| BIRD | `bird` | yes | — |
+| OpenBGPD | `openbgpd` | yes | — |
+| VyOS | `vyos` | yes | — |
+| TNSR | `tnsr` | yes | — |
+| **Local Server** | `local` | — | — |
+
+The `local` platform runs `ping` and `traceroute` as subprocess on the Spyglass server. Useful when your router doesn't support these commands or you want to add ping/traceroute without giving access to a router.
+
+## Configuration Reference
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `ENVIRONMENT` | `production` | Runtime environment (`production` / `development`) |
-| `APP_NAME` | `Spyglass` | Application display name |
-| `ORG_NAME` | `Your Organization` | Organization name shown in the UI and API |
-| `PRIMARY_ASN` | `65000` | Your primary AS number |
-| `SITE_URL` | `https://lg.example.com` | Public URL of the looking glass |
-| `SECRET_KEY` | — | Application secret key |
-| `ENABLE_DOCS` | `false` | Enable Swagger/ReDoc UI |
-| `DB_PASSWORD` | — | PostgreSQL password |
-| `DATABASE_URL` | — | Async PostgreSQL connection string |
-| `REDIS_PASSWORD` | — | Redis password |
-| `REDIS_URL` | — | Redis connection string |
-| `CORS_ORIGINS` | `["https://lg.example.com"]` | Allowed CORS origins (JSON array) |
-| `RATE_LIMIT_QUERY` | `20` | Query endpoint: requests per window |
-| `RATE_LIMIT_QUERY_WINDOW` | `60` | Query endpoint: window duration (seconds) |
-| `RATE_LIMIT_GENERAL` | `60` | General API: requests per window |
-| `RATE_LIMIT_GENERAL_WINDOW` | `60` | General API: window duration (seconds) |
-| `SSH_TIMEOUT` | `10` | SSH connection timeout (seconds) |
-| `SSH_COMMAND_TIMEOUT` | `30` | SSH command execution timeout (seconds) |
-| `CACHE_TTL` | `120` | Query cache duration (seconds) |
+See [`.env.example`](.env.example) for all available variables with descriptions.
 
-### `config/devices.yaml`
+Key settings:
 
-Defines the network devices available for queries. Each device specifies an `id`, `name`, `host`, `platform`, location info, and network parameters (ASN, source IP).
+| Variable | Description |
+|---|---|
+| `ORG_NAME` | Your organization name (shown in UI) |
+| `PRIMARY_ASN` | Your AS number |
+| `SECRET_KEY` | App secret — **must be changed** |
+| `DB_PASSWORD` / `REDIS_PASSWORD` | Database credentials |
+| `DEVICE_SSH_USERNAME` / `DEVICE_SSH_PASSWORD` | Global device credentials (overrides per-device) |
+| `REQUIRE_API_TOKEN` | `true` (default) for same-origin deploy, `false` for split frontend/backend |
+| `CORS_ORIGINS` | Allowed frontend origins as JSON array |
 
-```yaml
-devices:
-  - id: route-server-01
-    name: "Route-Server-01"
-    host: "10.0.1.1"
-    platform: cisco_iosxr
-    location:
-      city: "New York"
-      facility: "Equinix NY5"
-    network:
-      asn: 65000
-      ipv4_source: "198.51.100.1"
+### Config Files
+
+| File | Description |
+|---|---|
+| `config/devices.yaml` | Your device definitions (gitignored — copy from `.example`) |
+| `config/commands.yaml` | Command templates per platform (rarely needs editing) |
+| `config/acl.yaml` | Denied IP prefixes and prefix length limits |
+
+### Router User Setup
+
+Create a **read-only** user on your router for the looking glass:
+
+**Cisco IOS-XR:**
+```
+username lookingglass
+ group operator
+ secret <password>
 ```
 
-### `config/commands.yaml`
-
-Contains command templates for each platform and query type. Uses `{target}`, `{source_ipv4}`, `{source_ipv6}` placeholders.
-
-### `config/acl.yaml`
-
-Defines denied IP prefixes (private networks, loopback, multicast, etc.) and prefix length limits.
-
-## Directory Structure
-
+**Juniper Junos:**
 ```
-lg/
-├── backend/              # FastAPI application
-│   ├── app/
-│   │   ├── api/          # Endpoints and middleware
-│   │   ├── core/         # Logging, SSH, security
-│   │   ├── models/       # SQLAlchemy models
-│   │   ├── schemas/      # Pydantic schemas
-│   │   ├── services/     # Business logic
-│   │   ├── config.py     # Application settings
-│   │   └── main.py       # FastAPI app factory
-│   ├── alembic/          # Database migrations
-│   ├── tests/            # Pytest tests
-│   ├── Dockerfile
-│   └── pyproject.toml
-├── frontend/             # React + TypeScript SPA
-│   ├── src/
-│   │   ├── components/   # UI components
-│   │   ├── store/        # Zustand state management
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── Dockerfile
-│   └── package.json
-├── config/               # YAML configuration files
-│   ├── devices.yaml      # Device definitions
-│   ├── commands.yaml     # Per-platform command templates
-│   └── acl.yaml          # Access control list
-├── nginx/
-│   ├── nginx.conf        # Reverse proxy configuration
-│   └── ssl/              # TLS certificates (not in git)
-├── scripts/
-│   ├── setup.sh          # Development setup script
-│   ├── generate_secret.py
-│   └── seed_db.py
-├── docs/                 # Additional documentation
-├── docker-compose.yml    # Production Docker Compose
-├── docker-compose.dev.yml# Development Docker Compose
-├── Makefile              # Shortcut commands
-├── .env.example          # Example environment variables
-└── .gitignore
+set system login user lookingglass class read-only
+set system login user lookingglass authentication plain-text-password
 ```
 
-## API Endpoints
+**Cisco IOS:**
+```
+username lookingglass privilege 1 secret <password>
+```
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/v1/query` | Execute a network query |
-| `GET` | `/api/v1/devices` | List available devices |
-| `GET` | `/api/v1/health` | System health check |
-| `GET` | `/api/v1/info` | Application and AS info |
+> Use the minimum privilege level needed. The looking glass only runs `show`, `ping`, and `traceroute` commands — write access is **never** required.
 
-For detailed API documentation, see [docs/API.md](docs/API.md).
-
-## Makefile Commands
+## Development
 
 ```bash
-make dev          # Start development environment
-make prod         # Start production environment
-make down         # Stop all services
-make logs         # Follow production logs
-make migrate      # Run database migrations
-make seed         # Load sample data
-make test         # Run all tests
-make lint         # Run lint checks
-make clean        # Stop services, remove volumes and cache
+# Start dev environment (hot reload)
+docker compose -f docker-compose.dev.yml up -d
+
+# Or use the setup script
+bash scripts/setup.sh
+```
+
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
+
+```bash
+# Run tests
+make test
+
+# Lint
+make lint
+```
+
+## Architecture
+
+```
+┌──────────────┐     WebSocket / SSE     ┌──────────────┐     SSH / Telnet    ┌────────────┐
+│   Browser    │ ◄──────────────────────► │   Backend    │ ◄─────────────────► │  Router(s) │
+│  (React)     │                          │  (FastAPI)   │                     └────────────┘
+└──────────────┘                          │              │     subprocess      ┌────────────┐
+                                          │              │ ◄─────────────────► │ ping / tr  │
+                                          └──────┬───────┘                     └────────────┘
+                                                 │
+                                          ┌──────┴───────┐
+                                          │  PostgreSQL   │
+                                          │  Redis        │
+                                          └──────────────┘
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Backend | Python 3.11+, FastAPI, SQLAlchemy 2, Alembic, asyncssh/Netmiko |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy 2, Netmiko |
 | Frontend | React 18, TypeScript 5, Tailwind CSS, Zustand |
 | Database | PostgreSQL 15 |
 | Cache / Rate Limit | Redis 7 |
@@ -224,4 +248,4 @@ make clean        # Stop services, remove volumes and cache
 
 ## License
 
-See [LICENSE](LICENSE).
+[MIT](LICENSE)

@@ -6,16 +6,25 @@ echo "=== Spyglass — Setup ==="
 if [ ! -f .env ]; then
     echo "Creating .env from .env.example..."
     cp .env.example .env
-    SECRET_KEY=$(python3 scripts/generate_secret.py)
+    SECRET_KEY=$(python3 scripts/generate_secret.py 2>/dev/null || python3 -c "import secrets; print(secrets.token_urlsafe(48))")
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/change-me-generate-with-scripts\/generate_secret.py/$SECRET_KEY/" .env
+        sed -i '' "s/change-me-generate-a-random-secret/$SECRET_KEY/" .env
     else
-        sed -i "s/change-me-generate-with-scripts\/generate_secret.py/$SECRET_KEY/" .env
+        sed -i "s/change-me-generate-a-random-secret/$SECRET_KEY/" .env
     fi
     echo "Generated SECRET_KEY in .env"
     echo "WARNING: Change DB_PASSWORD and REDIS_PASSWORD before production use!"
 else
     echo ".env already exists, skipping."
+fi
+
+if [ ! -f config/devices.yaml ]; then
+    echo ""
+    echo "Creating config/devices.yaml from example..."
+    cp config/devices.yaml.example config/devices.yaml
+    echo "IMPORTANT: Edit config/devices.yaml and add your router(s)."
+else
+    echo "config/devices.yaml already exists, skipping."
 fi
 
 echo ""

@@ -36,6 +36,9 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
+# Device config (contains credentials) — use devices.yaml.example as template
+config/devices.yaml
+
 # SSL certs
 nginx/ssl/*.pem
 nginx/ssl/*.key

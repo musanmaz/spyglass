@@ -1,0 +1,111 @@
+# Spyglass — Device Configuration
+#
+# Copy this file to devices.yaml and edit to match your network.
+#
+#   cp devices.yaml.example devices.yaml
+#
+# Each device needs:
+#   id        — Unique identifier (used internally)
+#   name      — Display name shown in the UI
+#   host      — Hostname or IP address
+#   platform  — One of: cisco_iosxr, cisco_ios, juniper_junos, cisco_nxos,
+#                arista_eos, huawei_vrp, nokia_sros, mikrotik, frrouting,
+#                bird, openbgpd, vyos, tnsr, local
+#   protocol  — "ssh" (default) or "telnet"
+#
+# Optional fields:
+#   directives — Restrict which query types this device supports.
+#                Omit to allow all types the platform supports.
+#                Values: bgp_route, bgp_community, bgp_aspath, ping, traceroute
+#
+#   "local" platform — Runs ping/traceroute on the Spyglass server itself
+#                       via subprocess. No host/credentials needed.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Example 1: Cisco IOS-XR router (SSH)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# devices:
+#   - id: core-router-01
+#     name: "Core Router 01 — Istanbul"
+#     host: "10.0.1.1"
+#     platform: cisco_iosxr
+#     protocol: ssh
+#     username: "lookingglass"
+#     password: ""                    # Or use DEVICE_SSH_PASSWORD env var
+#     location:
+#       city: "Istanbul"
+#       country: "TR"
+#       facility: "Equinix IS1"
+#       coordinates: [41.0082, 28.9784]
+#     network:
+#       asn: 65000
+#       as_name: "Example Network"
+#       ipv4_source: "198.51.100.1"
+#       ipv6_source: "2001:db8::1"
+#     ssh:
+#       port: 22
+#       timeout: 10
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Example 2: Juniper router (SSH) — BGP only
+# ─────────────────────────────────────────────────────────────────────────────
+#
+#   - id: edge-router-01
+#     name: "Edge Router 01 — Frankfurt"
+#     host: "10.0.2.1"
+#     platform: juniper_junos
+#     location:
+#       city: "Frankfurt"
+#       country: "DE"
+#     network:
+#       asn: 65000
+#       as_name: "Example Network"
+#       ipv4_source: "198.51.100.2"
+#     ssh:
+#       port: 22
+#       timeout: 10
+#     directives:
+#       - bgp_route
+#       - bgp_community
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Example 3: Local server (ping/traceroute from Spyglass host)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+#   - id: local
+#     name: "Frankfurt (Local)"
+#     platform: local
+#     location:
+#       city: "Frankfurt"
+#       country: "DE"
+#     network:
+#       asn: 65000
+#       as_name: "Example Network"
+#     directives:
+#       - ping
+#       - traceroute
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Minimal working config — replace with your own devices
+# ─────────────────────────────────────────────────────────────────────────────
+
+devices:
+  - id: router-01
+    name: "Router 01"
+    host: "10.0.1.1"
+    platform: cisco_iosxr
+    protocol: ssh
+    username: "lookingglass"
+    password: ""
+    location:
+      city: "Istanbul"
+      country: "TR"
+    network:
+      asn: 65000
+      as_name: "My Network"
+      ipv4_source: "198.51.100.1"
+      ipv6_source: ""
+    ssh:
+      port: 22
+      timeout: 10
