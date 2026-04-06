@@ -5,10 +5,15 @@ export function QueryTypeSelector() {
   const queryType = useQueryStore((s) => s.queryType);
   const setQueryType = useQueryStore((s) => s.setQueryType);
   const isLoading = useQueryStore((s) => s.isLoading);
+  const supported = useQueryStore((s) => s.supportedQueryTypes);
+
+  const visibleTypes = supported.length > 0
+    ? QUERY_TYPES.filter((qt) => supported.includes(qt.id))
+    : QUERY_TYPES;
 
   return (
     <div className="flex flex-wrap gap-2">
-      {QUERY_TYPES.map((qt) => (
+      {visibleTypes.map((qt) => (
         <button
           key={qt.id}
           onClick={() => setQueryType(qt.id)}

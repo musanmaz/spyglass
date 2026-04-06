@@ -5,6 +5,7 @@ interface QueryState {
   queryType: string;
   target: string;
   selectedDevices: string[];
+  supportedQueryTypes: string[];
   isLoading: boolean;
   results: QueryResponse | null;
   error: string | null;
@@ -15,6 +16,7 @@ interface QueryState {
   setQueryType: (type: string) => void;
   setTarget: (target: string) => void;
   setSelectedDevices: (devices: string[]) => void;
+  setSupportedQueryTypes: (types: string[]) => void;
   setLoading: (loading: boolean) => void;
   setResults: (results: QueryResponse | null) => void;
   setError: (error: string | null) => void;
@@ -29,6 +31,7 @@ export const useQueryStore = create<QueryState>((set) => ({
   queryType: 'bgp_route',
   target: '',
   selectedDevices: [],
+  supportedQueryTypes: [],
   isLoading: false,
   results: null,
   error: null,
@@ -39,6 +42,7 @@ export const useQueryStore = create<QueryState>((set) => ({
   setQueryType: (queryType) => set({ queryType }),
   setTarget: (target) => set({ target }),
   setSelectedDevices: (selectedDevices) => set({ selectedDevices }),
+  setSupportedQueryTypes: (supportedQueryTypes) => set({ supportedQueryTypes }),
   setLoading: (isLoading) => set({ isLoading }),
   setResults: (results) => set({ results, error: null }),
   setError: (error) => set({ error, results: null }),
@@ -47,7 +51,7 @@ export const useQueryStore = create<QueryState>((set) => ({
   setStreamingMeta: (streamingMeta) => set({ streamingMeta }),
   resetStream: () => set({ streamingLines: [], streamingStatus: 'idle', streamingMeta: null, error: null }),
   reset: () => set({
-    queryType: 'bgp_route', target: '', selectedDevices: [], isLoading: false,
+    queryType: 'bgp_route', target: '', selectedDevices: [], supportedQueryTypes: [], isLoading: false,
     results: null, error: null, streamingLines: [],
     streamingStatus: 'idle', streamingMeta: null,
   }),

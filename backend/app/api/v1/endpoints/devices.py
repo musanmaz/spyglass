@@ -7,6 +7,14 @@ from typing import Dict
 router = APIRouter()
 
 
+def _device_supported_queries(cmd_builder: CommandBuilder, device: dict) -> list[str]:
+    platform_queries = cmd_builder.get_supported_queries(device.get("platform", ""))
+    directives = device.get("directives", [])
+    if directives:
+        return [q for q in platform_queries if q in directives]
+    return platform_queries
+
+
 @router.get("/devices", response_model=DeviceListResponse)
 async def list_devices(devices: Dict = Depends(get_devices_config)):
     cmd_builder = CommandBuilder()
@@ -24,7 +32,7 @@ async def list_devices(devices: Dict = Depends(get_devices_config)):
                 facility=loc.get("facility"),
                 coordinates=loc.get("coordinates"),
             ),
-            supported_queries=cmd_builder.get_supported_queries(device.get("platform", "")),
+            supported_queries=_device_supported_queries(cmd_builder, device),
             status="online",
             network=DeviceNetwork(
                 asn=net.get("asn", 0),

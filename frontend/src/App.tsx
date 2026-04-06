@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { QueryForm } from './components/query/QueryForm';
@@ -8,6 +9,21 @@ import { branding } from './lib/branding';
 
 export default function App() {
   const streamingStatus = useQueryStore((s) => s.streamingStatus);
+  const setSupportedQueryTypes = useQueryStore((s) => s.setSupportedQueryTypes);
+
+  useEffect(() => {
+    const base = import.meta.env.VITE_WS_URL
+      ? new URL(import.meta.env.VITE_WS_URL).origin.replace(/^ws/, 'http')
+      : '';
+    fetch(`${base}/api/v1/info`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.supported_query_types)) {
+          setSupportedQueryTypes(data.supported_query_types);
+        }
+      })
+      .catch(() => {});
+  }, [setSupportedQueryTypes]);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--lg-bg-primary)' }}>

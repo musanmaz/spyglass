@@ -28,8 +28,24 @@ router = APIRouter()
 logger = get_logger("api.stream")
 
 
+_PROMPT_RE = re.compile(r"^[\w\-./]+[#>]\s*$")
+
+
+def _is_noise(line: str, command: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return True
+    if _PROMPT_RE.match(stripped):
+        return True
+    if stripped.endswith("#") or stripped.endswith(">"):
+        if len(stripped) < 80 and " " not in stripped:
+            return True
+    if command and command in stripped:
+        return True
+    return False
+
+
 def _stream_command(params: dict, command: str, queue: asyncio.Queue, loop):
-    """Blocking Netmiko call that pushes output line-by-line to an asyncio queue."""
     from netmiko import ConnectHandler
 
     try:
@@ -51,7 +67,7 @@ def _stream_command(params: dict, command: str, queue: asyncio.Queue, loop):
                     lines = output_buf.split("\n")
                     for line in lines[:-1]:
                         clean = line.rstrip()
-                        if clean and not clean.endswith("#") and command not in clean:
+                        if not _is_noise(clean, command):
                             sanitized = OutputParser.sanitize(clean)
                             asyncio.run_coroutine_threadsafe(
                                 queue.put(("line", sanitized)), loop
@@ -65,7 +81,7 @@ def _stream_command(params: dict, command: str, queue: asyncio.Queue, loop):
 
             if output_buf.strip():
                 remainder = output_buf.strip()
-                if not remainder.endswith("#") and command not in remainder:
+                if not _is_noise(remainder, command):
                     sanitized = OutputParser.sanitize(remainder)
                     asyncio.run_coroutine_threadsafe(
                         queue.put(("line", sanitized)), loop
@@ -121,6 +137,14 @@ async def stream_query(
     device_id = list(devices.keys())[0]
     device = devices[device_id]
     platform = device["platform"]
+
+    directives = device.get("directives", [])
+    if directives and query_type not in directives:
+        return StreamingResponse(
+            _error_stream(f"This device does not support {query_type.replace('_', ' ')} queries"),
+            media_type="text/event-stream",
+        )
+
     ip_version = get_ip_version(target)
 
     cmd_builder = CommandBuilder(settings.COMMANDS_CONFIG_PATH)
