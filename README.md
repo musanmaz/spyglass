@@ -5,6 +5,7 @@
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript 5](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Redis 7+](https://img.shields.io/badge/Redis-7%2B-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Demo](https://img.shields.io/badge/Live_Demo-▶_Try_it-blueviolet)](https://spyglass.mehmet.tech)
 
 > **[Live Demo](https://spyglass.mehmet.tech)** — Fully functional demo connected to [Route Views](http://www.routeviews.org/) (University of Oregon) public route server. Try a BGP Route lookup!
