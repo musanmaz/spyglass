@@ -24,11 +24,16 @@ class CommandBuilder:
         if not template:
             return None
 
-        return template.format(
+        cmd = template.format(
             target=target,
             source_ipv4=source_ipv4,
             source_ipv6=source_ipv6,
         )
+
+        import re
+        cmd = re.sub(r'\s+source\s+(?=\s|$)', ' ', cmd)
+        cmd = re.sub(r'\s{2,}', ' ', cmd).strip()
+        return cmd
 
     def get_supported_queries(self, platform: str) -> list[str]:
         return list(self._commands.get(platform, {}).keys())
