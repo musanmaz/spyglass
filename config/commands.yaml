@@ -1,0 +1,62 @@
+platforms:
+  cisco_xr:
+    bgp_route:
+      ipv4: "show ip bgp {target}"
+      ipv6: "show ip bgp {target}"
+    ping:
+      ipv4: "ping {target} count 5 source {source_ipv4}"
+      ipv6: "ping ipv6 {target} count 5 source {source_ipv6}"
+    traceroute:
+      ipv4: "traceroute {target} timeout 2 probe 2 source {source_ipv4}"
+      ipv6: "traceroute ipv6 {target} timeout 2 probe 2 source {source_ipv6}"
+
+  cisco_iosxr:
+    bgp_route:
+      ipv4: "show bgp ipv4 unicast {target}"
+      ipv6: "show bgp ipv6 unicast {target}"
+    bgp_community:
+      ipv4: "show bgp ipv4 unicast community {target}"
+      ipv6: "show bgp ipv6 unicast community {target}"
+    bgp_aspath:
+      ipv4: "show bgp ipv4 unicast regexp {target}"
+      ipv6: "show bgp ipv6 unicast regexp {target}"
+    ping:
+      ipv4: "ping ipv4 {target} count 5 source {source_ipv4}"
+      ipv6: "ping ipv6 {target} count 5 source {source_ipv6}"
+    traceroute:
+      ipv4: "traceroute ipv4 {target} timeout 2 probe 2 source {source_ipv4}"
+      ipv6: "traceroute ipv6 {target} timeout 2 probe 2 source {source_ipv6}"
+
+  juniper_junos:
+    bgp_route:
+      ipv4: "show route {target} detail"
+      ipv6: "show route {target} detail"
+    bgp_community:
+      ipv4: "show route community {target} detail"
+      ipv6: "show route community {target} detail"
+    bgp_aspath:
+      ipv4: "show route aspath-regex \"{target}\" detail"
+      ipv6: "show route aspath-regex \"{target}\" detail"
+    ping:
+      ipv4: "ping {target} count 5 source {source_ipv4}"
+      ipv6: "ping {target} count 5 source {source_ipv6}"
+    traceroute:
+      ipv4: "traceroute {target} source {source_ipv4}"
+      ipv6: "traceroute {target} source {source_ipv6}"
+
+  cisco_ios:
+    bgp_route:
+      ipv4: "show ip bgp {target}"
+      ipv6: "show bgp ipv6 unicast {target}"
+    bgp_community:
+      ipv4: "show ip bgp community {target}"
+      ipv6: "show bgp ipv6 unicast community {target}"
+    bgp_aspath:
+      ipv4: "show ip bgp regexp {target}"
+      ipv6: "show bgp ipv6 unicast regexp {target}"
+    ping:
+      ipv4: "ping {target} source {source_ipv4} repeat 5"
+      ipv6: "ping ipv6 {target} source {source_ipv6} repeat 5"
+    traceroute:
+      ipv4: "traceroute {target} source {source_ipv4} timeout 2 probe 2"
+      ipv6: "traceroute ipv6 {target} source {source_ipv6} timeout 2 probe 2"

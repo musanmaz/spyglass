@@ -1,0 +1,67 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    ports: ["127.0.0.1:15173:5173"]
+    environment:
+      - API_PROXY_TOKEN=dev-proxy-secret-token-2025
+      - API_BACKEND_URL=http://backend:8000
+    depends_on: [backend]
+    networks: [frontend]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./backend/app:/app/app
+      - ./config:/app/config:ro
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://spyglass:devpassword@db:5432/spyglass
+      - REDIS_URL=redis://:devpassword@redis:6379/0
+      - SECRET_KEY=dev-secret-key-not-for-production
+      - API_PROXY_TOKEN=dev-proxy-secret-token-2025
+      - DEVICE_SSH_USERNAME=jedi
+      - DEVICE_SSH_PASSWORD=obiwan
+      - ENVIRONMENT=development
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [frontend, backend]
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: spyglass
+      POSTGRES_USER: spyglass
+      POSTGRES_PASSWORD: devpassword
+    ports: ["127.0.0.1:15432:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spyglass"]
+      interval: 5s
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass devpassword
+    ports: ["127.0.0.1:16379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "devpassword", "ping"]
+      interval: 5s
+    networks: [backend]
+
+volumes:
+  postgres_data:
+
+networks:
+  frontend:
+  backend:
