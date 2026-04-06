@@ -12,12 +12,14 @@ async def app_info(devices: Dict = Depends(get_devices_config)):
     cmd_builder = CommandBuilder()
     all_queries: set[str] = set()
     for device in devices.values():
-        platform_queries = cmd_builder.get_supported_queries(device.get("platform", ""))
         directives = device.get("directives", [])
-        if directives:
+        if device.get("platform") == "local":
+            all_queries.update(directives if directives else ["ping", "traceroute"])
+        elif directives:
+            platform_queries = cmd_builder.get_supported_queries(device.get("platform", ""))
             all_queries.update(q for q in platform_queries if q in directives)
         else:
-            all_queries.update(platform_queries)
+            all_queries.update(cmd_builder.get_supported_queries(device.get("platform", "")))
 
     return {
         "name": settings.APP_NAME,

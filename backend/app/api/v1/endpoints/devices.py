@@ -8,8 +8,10 @@ router = APIRouter()
 
 
 def _device_supported_queries(cmd_builder: CommandBuilder, device: dict) -> list[str]:
-    platform_queries = cmd_builder.get_supported_queries(device.get("platform", ""))
     directives = device.get("directives", [])
+    if device.get("platform") == "local":
+        return directives if directives else ["ping", "traceroute"]
+    platform_queries = cmd_builder.get_supported_queries(device.get("platform", ""))
     if directives:
         return [q for q in platform_queries if q in directives]
     return platform_queries

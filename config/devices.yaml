@@ -21,3 +21,17 @@ devices:
       timeout: 15
     directives:
       - bgp_route
+
+  - id: local
+    name: "Frankfurt (Local)"
+    platform: local
+    location:
+      city: "Frankfurt"
+      country: "DE"
+      facility: "DigitalOcean FRA1"
+    network:
+      asn: 0
+      as_name: ""
+    directives:
+      - ping
+      - traceroute

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request, Query
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_devices_config, get_redis
+from app.api.deps import get_devices_config, get_redis, find_device_for_query
 from app.services.command_builder import CommandBuilder
 from app.services.acl_checker import AclChecker
 from app.services.validators import get_ip_version
@@ -17,6 +17,13 @@ from app.services.device_connector import (
     _is_command_allowed,
     _get_semaphore,
     _resolve_device_type,
+)
+from app.services.local_executor import (
+    build_local_command,
+    is_local_command_allowed,
+    stream_local_command,
+    PING_TIMEOUT,
+    TRACEROUTE_TIMEOUT,
 )
 from app.core.constants import SUPPORTED_QUERY_TYPES
 from app.core.exceptions import TargetDeniedError, SecurityError
@@ -134,50 +141,38 @@ async def stream_query(
             media_type="text/event-stream",
         )
 
-    device_id = list(devices.keys())[0]
-    device = devices[device_id]
+    match = find_device_for_query(query_type)
+    if not match:
+        return StreamingResponse(
+            _error_stream(f"No device available for {query_type.replace('_', ' ')} queries"),
+            media_type="text/event-stream",
+        )
+
+    device_id, device = match
     platform = device["platform"]
-
-    directives = device.get("directives", [])
-    if directives and query_type not in directives:
-        return StreamingResponse(
-            _error_stream(f"This device does not support {query_type.replace('_', ' ')} queries"),
-            media_type="text/event-stream",
-        )
-
     ip_version = get_ip_version(target)
+    use_local = platform == "local"
 
-    cmd_builder = CommandBuilder(settings.COMMANDS_CONFIG_PATH)
-    command = cmd_builder.build(
-        platform=platform,
-        query_type=query_type,
-        target=target,
-        ip_version=ip_version,
-        source_ipv4=device.get("network", {}).get("ipv4_source", ""),
-        source_ipv6=device.get("network", {}).get("ipv6_source", ""),
-    )
-
-    if not command:
-        return StreamingResponse(
-            _error_stream("This query type is not supported"),
-            media_type="text/event-stream",
+    if use_local:
+        if not is_local_command_allowed(query_type):
+            return StreamingResponse(_error_stream("This query type is not supported locally"), media_type="text/event-stream")
+        cmd_args = build_local_command(query_type, target, ip_version)
+        if not cmd_args:
+            return StreamingResponse(_error_stream("Failed to build local command"), media_type="text/event-stream")
+    else:
+        cmd_builder = CommandBuilder(settings.COMMANDS_CONFIG_PATH)
+        command = cmd_builder.build(
+            platform=platform,
+            query_type=query_type,
+            target=target,
+            ip_version=ip_version,
+            source_ipv4=device.get("network", {}).get("ipv4_source", ""),
+            source_ipv6=device.get("network", {}).get("ipv6_source", ""),
         )
-
-    if not _is_command_allowed(command, platform):
-        return StreamingResponse(
-            _error_stream("Security: command not allowed"),
-            media_type="text/event-stream",
-        )
-
-    protocol = device.get("protocol", "ssh")
-    netmiko_params = {
-        "device_type": _resolve_device_type(platform, protocol),
-        "host": device["host"],
-        "port": device.get("ssh", {}).get("port", 22 if protocol == "ssh" else 23),
-        "username": device.get("username", ""),
-        "password": device.get("password", ""),
-        "timeout": device.get("ssh", {}).get("timeout", settings.SSH_TIMEOUT),
-    }
+        if not command:
+            return StreamingResponse(_error_stream("This query type is not supported"), media_type="text/event-stream")
+        if not _is_command_allowed(command, platform):
+            return StreamingResponse(_error_stream("Security: command not allowed"), media_type="text/event-stream")
 
     request_id = str(uuid.uuid4())
 
@@ -187,52 +182,54 @@ async def stream_query(
             "device": device.get("name", device_id),
             "query_type": query_type,
             "target": target,
-            "message": "Connecting to device...",
+            "message": "Running query..." if use_local else "Connecting to device...",
         }))
 
         queue: asyncio.Queue = asyncio.Queue()
-        loop = asyncio.get_event_loop()
-        semaphore = _get_semaphore(device_id)
+        start = time.monotonic()
 
-        async with semaphore:
-            task = asyncio.get_event_loop().run_in_executor(
-                None, _stream_command, netmiko_params, command, queue, loop
-            )
+        if use_local:
+            timeout = PING_TIMEOUT if query_type == "ping" else TRACEROUTE_TIMEOUT
+            task = asyncio.create_task(stream_local_command(cmd_args, queue, timeout))
+        else:
+            protocol = device.get("protocol", "ssh")
+            netmiko_params = {
+                "device_type": _resolve_device_type(platform, protocol),
+                "host": device["host"],
+                "port": device.get("ssh", {}).get("port", 22 if protocol == "ssh" else 23),
+                "username": device.get("username", ""),
+                "password": device.get("password", ""),
+                "timeout": device.get("ssh", {}).get("timeout", settings.SSH_TIMEOUT),
+            }
+            loop = asyncio.get_event_loop()
+            task = loop.run_in_executor(None, _stream_command, netmiko_params, command, queue, loop)
 
-            start = time.monotonic()
-            try:
-                while True:
-                    try:
-                        msg_type, data = await asyncio.wait_for(
-                            queue.get(), timeout=settings.SSH_COMMAND_TIMEOUT
-                        )
-                    except asyncio.TimeoutError:
-                        yield _sse("error", json.dumps({"message": "Query timed out"}))
-                        break
+        read_timeout = (PING_TIMEOUT if query_type == "ping" else TRACEROUTE_TIMEOUT) if use_local else settings.SSH_COMMAND_TIMEOUT
 
-                    if msg_type == "line":
-                        yield _sse("output", data)
-                    elif msg_type == "done":
-                        elapsed = round((time.monotonic() - start) * 1000)
-                        yield _sse("complete", json.dumps({
-                            "response_time_ms": elapsed,
-                            "request_id": request_id,
-                        }))
-                        break
-                    elif msg_type == "error":
-                        yield _sse("error", json.dumps({"message": data}))
-                        break
-            finally:
-                task.cancel()
+        try:
+            while True:
+                try:
+                    msg_type, data = await asyncio.wait_for(queue.get(), timeout=read_timeout)
+                except asyncio.TimeoutError:
+                    yield _sse("error", json.dumps({"message": "Query timed out"}))
+                    break
+
+                if msg_type == "line":
+                    yield _sse("output", data)
+                elif msg_type == "done":
+                    elapsed = round((time.monotonic() - start) * 1000)
+                    yield _sse("complete", json.dumps({"response_time_ms": elapsed, "request_id": request_id}))
+                    break
+                elif msg_type == "error":
+                    yield _sse("error", json.dumps({"message": data}))
+                    break
+        finally:
+            task.cancel()
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
 
 

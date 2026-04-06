@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
-from app.api.deps import get_devices_config, get_redis
+from app.api.deps import get_devices_config, get_redis, find_device_for_query
 from app.services.command_builder import CommandBuilder
 from app.services.acl_checker import AclChecker
 from app.services.validators import get_ip_version
@@ -18,6 +18,13 @@ from app.services.device_connector import (
     _is_command_allowed,
     _get_semaphore,
     _resolve_device_type,
+)
+from app.services.local_executor import (
+    build_local_command,
+    is_local_command_allowed,
+    stream_local_command,
+    PING_TIMEOUT,
+    TRACEROUTE_TIMEOUT,
 )
 from app.core.constants import SUPPORTED_QUERY_TYPES
 from app.core.security import validate_ip_or_prefix, _check_forbidden_patterns
@@ -200,91 +207,112 @@ async def ws_query(websocket: WebSocket):
         await websocket.close()
         return
 
-    devices = get_devices_config()
-    device_id = list(devices.keys())[0]
-    device = devices[device_id]
+    match = find_device_for_query(query_type)
+    if not match:
+        await send("error", {"message": f"No device available for {query_type.replace('_', ' ')} queries"})
+        await websocket.close()
+        return
+
+    device_id, device = match
     platform = device["platform"]
-
-    directives = device.get("directives", [])
-    if directives and query_type not in directives:
-        await send("error", {"message": f"This device does not support {query_type.replace('_', ' ')} queries"})
-        await websocket.close()
-        return
-
     ip_version = get_ip_version(target)
+    use_local = platform == "local"
 
-    cmd_builder = CommandBuilder(settings.COMMANDS_CONFIG_PATH)
-    command = cmd_builder.build(
-        platform=platform,
-        query_type=query_type,
-        target=target,
-        ip_version=ip_version,
-        source_ipv4=device.get("network", {}).get("ipv4_source", ""),
-        source_ipv6=device.get("network", {}).get("ipv6_source", ""),
-    )
-
-    if not command:
-        await send("error", {"message": "This query type is not supported"})
-        await websocket.close()
-        return
-
-    if not _is_command_allowed(command, platform):
-        await send("error", {"message": "Security: command not allowed"})
-        await websocket.close()
-        return
-
-    protocol = device.get("protocol", "ssh")
-    netmiko_params = {
-        "device_type": _resolve_device_type(platform, protocol),
-        "host": device["host"],
-        "port": device.get("ssh", {}).get("port", 22 if protocol == "ssh" else 23),
-        "username": device.get("username", ""),
-        "password": device.get("password", ""),
-        "timeout": device.get("ssh", {}).get("timeout", settings.SSH_TIMEOUT),
-    }
+    if use_local:
+        if not is_local_command_allowed(query_type):
+            await send("error", {"message": "This query type is not supported locally"})
+            await websocket.close()
+            return
+        cmd_args = build_local_command(query_type, target, ip_version)
+        if not cmd_args:
+            await send("error", {"message": "Failed to build local command"})
+            await websocket.close()
+            return
+    else:
+        cmd_builder = CommandBuilder(settings.COMMANDS_CONFIG_PATH)
+        command = cmd_builder.build(
+            platform=platform,
+            query_type=query_type,
+            target=target,
+            ip_version=ip_version,
+            source_ipv4=device.get("network", {}).get("ipv4_source", ""),
+            source_ipv6=device.get("network", {}).get("ipv6_source", ""),
+        )
+        if not command:
+            await send("error", {"message": "This query type is not supported"})
+            await websocket.close()
+            return
+        if not _is_command_allowed(command, platform):
+            await send("error", {"message": "Security: command not allowed"})
+            await websocket.close()
+            return
 
     await send("status", {
         "request_id": request_id,
         "device": device.get("name", device_id),
         "query_type": query_type,
         "target": target,
-        "message": "Connecting to device...",
+        "message": "Running query..." if use_local else "Connecting to device...",
     })
 
     queue: asyncio.Queue = asyncio.Queue()
-    loop = asyncio.get_event_loop()
-    semaphore = _get_semaphore(device_id)
+    start = time.monotonic()
 
-    async with semaphore:
-        task = loop.run_in_executor(
-            None, _stream_command, netmiko_params, command, queue, loop
-        )
-
-        start = time.monotonic()
+    if use_local:
+        timeout = PING_TIMEOUT if query_type == "ping" else TRACEROUTE_TIMEOUT
+        task = asyncio.create_task(stream_local_command(cmd_args, queue, timeout))
         try:
             while True:
                 try:
-                    msg_type, msg_data = await asyncio.wait_for(
-                        queue.get(), timeout=settings.SSH_COMMAND_TIMEOUT
-                    )
+                    msg_type, msg_data = await asyncio.wait_for(queue.get(), timeout=timeout)
                 except asyncio.TimeoutError:
                     await send("error", {"message": "Query timed out"})
                     break
-
                 if msg_type == "line":
                     await send("output", {"data": msg_data})
                 elif msg_type == "done":
                     elapsed = round((time.monotonic() - start) * 1000)
-                    await send("complete", {
-                        "response_time_ms": elapsed,
-                        "request_id": request_id,
-                    })
+                    await send("complete", {"response_time_ms": elapsed, "request_id": request_id})
                     break
                 elif msg_type == "error":
                     await send("error", {"message": msg_data})
                     break
         finally:
             task.cancel()
+    else:
+        protocol = device.get("protocol", "ssh")
+        netmiko_params = {
+            "device_type": _resolve_device_type(platform, protocol),
+            "host": device["host"],
+            "port": device.get("ssh", {}).get("port", 22 if protocol == "ssh" else 23),
+            "username": device.get("username", ""),
+            "password": device.get("password", ""),
+            "timeout": device.get("ssh", {}).get("timeout", settings.SSH_TIMEOUT),
+        }
+        loop = asyncio.get_event_loop()
+        semaphore = _get_semaphore(device_id)
+        async with semaphore:
+            task = loop.run_in_executor(None, _stream_command, netmiko_params, command, queue, loop)
+            try:
+                while True:
+                    try:
+                        msg_type, msg_data = await asyncio.wait_for(
+                            queue.get(), timeout=settings.SSH_COMMAND_TIMEOUT
+                        )
+                    except asyncio.TimeoutError:
+                        await send("error", {"message": "Query timed out"})
+                        break
+                    if msg_type == "line":
+                        await send("output", {"data": msg_data})
+                    elif msg_type == "done":
+                        elapsed = round((time.monotonic() - start) * 1000)
+                        await send("complete", {"response_time_ms": elapsed, "request_id": request_id})
+                        break
+                    elif msg_type == "error":
+                        await send("error", {"message": msg_data})
+                        break
+            finally:
+                task.cancel()
 
     if websocket.client_state == WebSocketState.CONNECTED:
         await websocket.close()

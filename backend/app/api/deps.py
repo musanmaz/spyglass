@@ -65,6 +65,16 @@ def _get_command_builder() -> CommandBuilder:
     return CommandBuilder(settings.COMMANDS_CONFIG_PATH)
 
 
+def find_device_for_query(query_type: str) -> tuple[str, dict] | None:
+    """Return (device_id, device_config) for the first device that supports the query type."""
+    devices = get_devices_config()
+    for device_id, device in devices.items():
+        directives = device.get("directives", [])
+        if not directives or query_type in directives:
+            return device_id, device
+    return None
+
+
 def get_query_executor() -> QueryExecutor:
     redis = get_redis()
     cache = CacheService(redis, default_ttl=settings.CACHE_TTL)
