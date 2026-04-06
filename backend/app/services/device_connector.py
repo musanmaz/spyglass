@@ -118,6 +118,19 @@ NETMIKO_PLATFORM_MAP = {
     "tnsr": "linux",
 }
 
+NETMIKO_TELNET_MAP = {
+    "cisco_ios": "cisco_ios_telnet",
+    "cisco_xr": "cisco_xr_telnet",
+    "cisco_nxos": "cisco_nxos",
+    "juniper_junos": "juniper_junos_telnet",
+}
+
+
+def _resolve_device_type(platform: str, protocol: str = "ssh") -> str:
+    if protocol == "telnet":
+        return NETMIKO_TELNET_MAP.get(platform, NETMIKO_PLATFORM_MAP.get(platform, "linux") + "_telnet")
+    return NETMIKO_PLATFORM_MAP.get(platform, "linux")
+
 
 async def execute_on_device(command: str, device_config: dict) -> str:
     platform = device_config["platform"]
@@ -129,10 +142,11 @@ async def execute_on_device(command: str, device_config: dict) -> str:
     semaphore = _get_semaphore(device_id)
     
     async with semaphore:
+        protocol = device_config.get("protocol", "ssh")
         netmiko_params = {
-            "device_type": NETMIKO_PLATFORM_MAP.get(platform, "linux"),
+            "device_type": _resolve_device_type(platform, protocol),
             "host": device_config["host"],
-            "port": device_config.get("ssh", {}).get("port", 22),
+            "port": device_config.get("ssh", {}).get("port", 22 if protocol == "ssh" else 23),
             "username": device_config.get("username", ""),
             "password": device_config.get("password", ""),
             "timeout": device_config.get("ssh", {}).get("timeout", settings.SSH_TIMEOUT),

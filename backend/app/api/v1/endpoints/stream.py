@@ -16,7 +16,7 @@ from app.services.output_parser import OutputParser
 from app.services.device_connector import (
     _is_command_allowed,
     _get_semaphore,
-    NETMIKO_PLATFORM_MAP,
+    _resolve_device_type,
 )
 from app.core.constants import SUPPORTED_QUERY_TYPES
 from app.core.exceptions import TargetDeniedError, SecurityError
@@ -145,10 +145,11 @@ async def stream_query(
             media_type="text/event-stream",
         )
 
+    protocol = device.get("protocol", "ssh")
     netmiko_params = {
-        "device_type": NETMIKO_PLATFORM_MAP.get(platform, "linux"),
+        "device_type": _resolve_device_type(platform, protocol),
         "host": device["host"],
-        "port": device.get("ssh", {}).get("port", 22),
+        "port": device.get("ssh", {}).get("port", 22 if protocol == "ssh" else 23),
         "username": device.get("username", ""),
         "password": device.get("password", ""),
         "timeout": device.get("ssh", {}).get("timeout", settings.SSH_TIMEOUT),

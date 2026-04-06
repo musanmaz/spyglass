@@ -20,10 +20,11 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # Proxy Token (required for all API calls)
+    # Proxy Token (required for all API calls behind a reverse proxy)
     API_PROXY_TOKEN: str = "change-me-to-a-random-token"
+    REQUIRE_API_TOKEN: bool = True
 
-    # CORS (only needed if API is directly exposed)
+    # CORS (needed when frontend and backend are on different domains)
     CORS_ORIGINS: List[str] = []
 
     # Allowed WebSocket origins (e.g. ["https://lg.example.com"])

@@ -1,24 +1,23 @@
 devices:
-  - id: example-router
-    name: "Example Router"
-    host: "0.0.0.0"
-    platform: cisco_xr
-    username: "${DEVICE_SSH_USERNAME}"
-    password: "${DEVICE_SSH_PASSWORD}"
+  - id: route-views
+    name: "Route Views (Oregon)"
+    host: "route-views.routeviews.org"
+    platform: cisco_ios
+    protocol: telnet
+    username: "rviews"
+    password: ""
     location:
-      city: "Example City"
+      city: "Oregon"
       country: "US"
-      facility: "Example DC"
-      coordinates: [0.0, 0.0]
+      facility: "University of Oregon"
+      coordinates: [44.0521, -123.0868]
     network:
-      asn: 65000
-      as_name: "Example Network"
+      asn: 6447
+      as_name: "University of Oregon Route Views"
       ipv4_source: ""
       ipv6_source: ""
     ssh:
-      port: 22
-      timeout: 10
+      port: 23
+      timeout: 15
     directives:
-      - ping
-      - traceroute
       - bgp_route

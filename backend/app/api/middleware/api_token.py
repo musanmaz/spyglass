@@ -9,11 +9,15 @@ class ApiTokenMiddleware(BaseHTTPMiddleware):
 
     EXEMPT_PATHS = {"/api/v1/health"}
 
-    def __init__(self, app, token: str):
+    def __init__(self, app, token: str, require: bool = True):
         super().__init__(app)
         self.token = token
+        self.require = require
 
     async def dispatch(self, request: Request, call_next):
+        if not self.require:
+            return await call_next(request)
+
         path = request.url.path
 
         if not path.startswith("/api/"):

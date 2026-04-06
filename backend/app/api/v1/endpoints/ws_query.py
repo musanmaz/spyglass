@@ -16,7 +16,7 @@ from app.services.output_parser import OutputParser
 from app.services.device_connector import (
     _is_command_allowed,
     _get_semaphore,
-    NETMIKO_PLATFORM_MAP,
+    _resolve_device_type,
 )
 from app.core.constants import SUPPORTED_QUERY_TYPES
 from app.core.security import validate_ip_or_prefix, _check_forbidden_patterns
@@ -110,7 +110,7 @@ def _verify_ws_token(websocket: WebSocket) -> bool:
 
 @router.websocket("/ws/query")
 async def ws_query(websocket: WebSocket):
-    if not _verify_ws_token(websocket):
+    if settings.REQUIRE_API_TOKEN and not _verify_ws_token(websocket):
         logger.warning("WS rejected: missing or invalid API token")
         await websocket.close(code=4003, reason="Forbidden")
         return
@@ -121,6 +121,8 @@ async def ws_query(websocket: WebSocket):
     if sec_fetch == "same-origin":
         pass
     elif _is_origin_allowed(origin):
+        pass
+    elif not settings.REQUIRE_API_TOKEN and origin:
         pass
     else:
         logger.warning("WS rejected: invalid origin=%s sec_fetch=%s", origin, sec_fetch)
@@ -206,10 +208,11 @@ async def ws_query(websocket: WebSocket):
         await websocket.close()
         return
 
+    protocol = device.get("protocol", "ssh")
     netmiko_params = {
-        "device_type": NETMIKO_PLATFORM_MAP.get(platform, "linux"),
+        "device_type": _resolve_device_type(platform, protocol),
         "host": device["host"],
-        "port": device.get("ssh", {}).get("port", 22),
+        "port": device.get("ssh", {}).get("port", 22 if protocol == "ssh" else 23),
         "username": device.get("username", ""),
         "password": device.get("password", ""),
         "timeout": device.get("ssh", {}).get("timeout", settings.SSH_TIMEOUT),

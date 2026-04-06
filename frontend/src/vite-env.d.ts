@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_PEERINGDB_URL?: string;
   readonly VITE_LOGO_LIGHT?: string;
   readonly VITE_LOGO_DARK?: string;
+  readonly VITE_WS_URL?: string;
 }
 
 interface ImportMeta {

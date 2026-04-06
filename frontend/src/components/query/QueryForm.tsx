@@ -28,8 +28,15 @@ export function QueryForm() {
     setError(null);
     setStreamingStatus('connecting');
 
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${proto}//${location.host}/ws/query`);
+    const backendUrl = import.meta.env.VITE_WS_URL;
+    let wsUrl: string;
+    if (backendUrl) {
+      wsUrl = backendUrl;
+    } else {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${proto}//${location.host}/ws/query`;
+    }
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

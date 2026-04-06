@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     if settings.ENVIRONMENT == "production":
-        if "change-me" in settings.API_PROXY_TOKEN:
+        if settings.REQUIRE_API_TOKEN and "change-me" in settings.API_PROXY_TOKEN:
             raise RuntimeError("FATAL: API_PROXY_TOKEN must be changed from default before running in production")
         if "change-me" in settings.SECRET_KEY:
             raise RuntimeError("FATAL: SECRET_KEY must be changed from default before running in production")
@@ -50,6 +50,7 @@ def create_app() -> FastAPI:
     application.add_middleware(
         ApiTokenMiddleware,
         token=settings.API_PROXY_TOKEN,
+        require=settings.REQUIRE_API_TOKEN,
     )
     application.add_middleware(
         RateLimitMiddleware,
